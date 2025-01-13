@@ -1,9 +1,12 @@
 import os
 import re
 from datetime import datetime
-import exifread
+import win32com.client
 from pathlib import Path
 from typing import Dict, Tuple
+
+shell = win32com.client.Dispatch("Shell.Application")
+trans_table = {ord('\u200e') : None, ord('\u200f') : None}
 
 def extract_date_from_android_filename(filename: str) -> datetime:
     """Extract date from Android-style filenames (IMG_/VID_/PXL_YYYYMMDD_HHMMSS*)."""
@@ -13,29 +16,24 @@ def extract_date_from_android_filename(filename: str) -> datetime:
         return datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
     return None
 
-def extract_date_from_heic_metadata(filepath: str) -> datetime:
-    """Extract date from HEIC file metadata."""
-    with open(filepath, 'rb') as f:
-        tags = exifread.process_file(f)
-        # Try different possible tag names for capture date
-        date_tags = [
-            'EXIF DateTimeOriginal',
-            'Image DateTime',
-            'Date of capture',
-            'Дата зйомки',  # Ukrainian
-            'Media created',
-            'Носій створено'  # Ukrainian
-        ]
+def extract_date_from_ios_metadata(filepath: str) -> datetime:
+    """Extract date from Windows file metadata."""
+    try:
+        folder = shell.NameSpace(os.path.dirname(filepath))
+        file_item = folder.ParseName(os.path.basename(filepath))
         
-        for tag in date_tags:
-            if tag in tags:
-                try:
-                    # Assuming date format is "YYYY:MM:DD HH:MM:SS"
-                    date_str = str(tags[tag])
-                    return datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                except ValueError:
-                    continue
-    return None
+        # Use specific indices based on file type
+        extension = os.path.splitext(filepath)[1].lower()
+        # Index 12 for images (Date taken), 208 for videos (Media created)
+        index = 208 if extension in ['.mov', '.mp4'] else 12
+        
+        date_str = folder.GetDetailsOf(file_item, index)[1:].translate(trans_table)
+        if date_str:
+            return datetime.strptime(date_str, "%d.%m.%Y %H:%M")  
+        return None
+    except Exception as e:
+        print(f"Error reading metadata for {filepath}: {e}")
+        return None
 
 def get_file_creation_time(filepath: str) -> Tuple[datetime, str]:
     """
@@ -56,7 +54,7 @@ def get_file_creation_time(filepath: str) -> Tuple[datetime, str]:
     
     # For HEIC/MOV files
     if extension.endswith(('.heic', '.mov')):
-        metadata_date = extract_date_from_heic_metadata(filepath)
+        metadata_date = extract_date_from_ios_metadata(filepath)
         if metadata_date:
             return metadata_date, 'ios'
     
@@ -89,21 +87,26 @@ def sort_and_rename_files(input_dir: str, output_dir: str) -> None:
     files_data.sort(key=lambda x: x[1])
     
     # Rename and copy files
-    for index, (filepath, _, original_filename) in enumerate(files_data, start=1):
+    for index, (filepath, creation_time, original_filename) in enumerate(files_data, 1):
         extension = os.path.splitext(original_filename)[1]
-        new_filename = f"{index}{extension}"
+        time_str = creation_time.strftime("%Y%m%d_%H%M%S")
+        new_filename = f"{time_str}{extension}"
         new_filepath = os.path.join(output_dir, new_filename)
         
         # Copy file to new location with new name
         with open(filepath, 'rb') as src, open(new_filepath, 'wb') as dst:
+            print("Copying file (", index, "/", len(files_data), "): ", filename, "...", sep="")
             dst.write(src.read())
         
         print(f"Processed: {original_filename} -> {new_filename}")
 
 def main():
-    input_dir = "input_folder"  # Replace with your input folder path
-    output_dir = "sorted_media"  # Replace with your output folder path
+    input_dir = "D:\\KARPATY2\\testingg"  # Replace with your input folder path
+    output_dir = "D:\\KARPATY2\\output"  # Replace with your output folder path
     
+    print("Selected input directory:", input_dir)
+    print("Selected output directory:", output_dir)
+    print()
     print("Starting media file sorting...")
     sort_and_rename_files(input_dir, output_dir)
     print("Sorting complete!")
