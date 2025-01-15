@@ -60,7 +60,25 @@ def get_file_creation_time(filepath: str) -> Tuple[datetime, str]:
     
     return None, 'unknown'
 
-def sort_and_rename_files(input_dir: str, output_dir: str) -> None:
+def get_unique_filepath(filepath: str) -> str:
+    """
+    Generate a unique filepath by adding _N to the filename if it already exists.
+    """
+    if not os.path.exists(filepath):
+        return filepath
+    
+    directory = os.path.dirname(filepath)
+    filename, extension = os.path.splitext(os.path.basename(filepath))
+    counter = 1
+    
+    while True:
+        new_filepath = os.path.join(directory, f"{filename}_{counter}{extension}")
+        if not os.path.exists(new_filepath):
+            return new_filepath
+        counter += 1
+
+
+def sort_and_rename_files(input_dir: str, output_dir: str, tag: str) -> None:
     """
     Sort files by creation date and rename them sequentially.
     """
@@ -90,9 +108,10 @@ def sort_and_rename_files(input_dir: str, output_dir: str) -> None:
     for index, (filepath, creation_time, original_filename) in enumerate(files_data, 1):
         extension = os.path.splitext(original_filename)[1]
         time_str = creation_time.strftime("%Y%m%d_%H%M%S")
-        new_filename = f"{time_str}{extension}"
+        new_filename = f"{time_str}_{tag}{extension}"
         new_filepath = os.path.join(output_dir, new_filename)
-        
+        new_filepath = get_unique_filepath(new_filepath)
+
         # Copy file to new location with new name
         with open(filepath, 'rb') as src, open(new_filepath, 'wb') as dst:
             print("Copying file (", index, "/", len(files_data), "): ", filename, "...", sep="")
@@ -101,14 +120,14 @@ def sort_and_rename_files(input_dir: str, output_dir: str) -> None:
         print(f"Processed: {original_filename} -> {new_filename}")
 
 def main():
-    input_dir = "D:\\KARPATY2\\testingg"  # Replace with your input folder path
-    output_dir = "D:\\KARPATY2\\output"  # Replace with your output folder path
+    input_dir = ""  # Replace with your input folder path
+    output_dir = ""  # Replace with your output folder path
     
     print("Selected input directory:", input_dir)
     print("Selected output directory:", output_dir)
     print()
     print("Starting media file sorting...")
-    sort_and_rename_files(input_dir, output_dir)
+    sort_and_rename_files(input_dir, output_dir, tag="")
     print("Sorting complete!")
 
 if __name__ == "__main__":
