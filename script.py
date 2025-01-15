@@ -8,6 +8,14 @@ from typing import Dict, Tuple
 shell = win32com.client.Dispatch("Shell.Application")
 trans_table = {ord('\u200e') : None, ord('\u200f') : None}
 
+def extract_seconds_from_filename(filename: str) -> int:
+    """Extract seconds from PXL/IMG/VID filename format."""
+    match = re.match(r'(?:PXL|IMG|VID)_\d{8}_(\d{2})(\d{2})(\d{2})', filename)
+    if match:
+        _, _, seconds = match.groups()
+        return int(seconds)
+    return 0
+
 def extract_date_from_android_filename(filename: str) -> datetime:
     """Extract date from Android-style filenames (IMG_/VID_/PXL_YYYYMMDD_HHMMSS*)."""
     match = re.match(r'(?:IMG|VID|PXL)_(\d{8})_(\d{6})', filename)
@@ -16,7 +24,7 @@ def extract_date_from_android_filename(filename: str) -> datetime:
         return datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
     return None
 
-def extract_date_from_ios_metadata(filepath: str) -> datetime:
+def extract_date_from_ios_and_pxl_metadata(filepath: str) -> datetime:
     """Extract date from Windows file metadata."""
     try:
         folder = shell.NameSpace(os.path.dirname(filepath))
@@ -29,7 +37,13 @@ def extract_date_from_ios_metadata(filepath: str) -> datetime:
         
         date_str = folder.GetDetailsOf(file_item, index)[1:].translate(trans_table)
         if date_str:
-            return datetime.strptime(date_str, "%d.%m.%Y %H:%M")  
+            datetime_obj = datetime.strptime(date_str, "%d.%m.%Y %H:%M")  
+            if datetime_obj:
+                # For Pixel files, add seconds from filename
+                if os.path.basename(filepath).startswith('PXL_'):
+                    seconds = extract_seconds_from_filename(os.path.basename(filepath))
+                    datetime_obj = datetime_obj.replace(second=seconds)
+                return datetime_obj
         return None
     except Exception as e:
         print(f"Error reading metadata for {filepath}: {e}")
@@ -47,14 +61,20 @@ def get_file_creation_time(filepath: str) -> Tuple[datetime, str]:
     if re.match(r'IMG_\d+\.(PNG|JPG)$', filename, re.IGNORECASE):
         return None, 'skip'
     
-    # Try Android/Pixel style filename
+    # Handle Pixel files with metadata + filename seconds
+    if filename.startswith('PXL_'):
+        metadata_date = extract_date_from_ios_and_pxl_metadata(filepath)
+        if metadata_date:
+            return metadata_date, 'pixel'
+
+    # Try Android/Pixel style filename (non-Pixel)
     android_date = extract_date_from_android_filename(filename)
     if android_date:
         return android_date, 'android'
     
     # For HEIC/MOV files
     if extension.endswith(('.heic', '.mov')):
-        metadata_date = extract_date_from_ios_metadata(filepath)
+        metadata_date = extract_date_from_ios_and_pxl_metadata(filepath)
         if metadata_date:
             return metadata_date, 'ios'
     
@@ -114,7 +134,7 @@ def sort_and_rename_files(input_dir: str, output_dir: str, tag: str) -> None:
 
         # Copy file to new location with new name
         with open(filepath, 'rb') as src, open(new_filepath, 'wb') as dst:
-            print("Copying file (", index, "/", len(files_data), "): ", filename, "...", sep="")
+            print("Copying file (", index, "/", len(files_data), "): ", original_filename, "...", sep="")
             dst.write(src.read())
         
         print(f"Processed: {original_filename} -> {new_filename}")
@@ -127,7 +147,7 @@ def main():
     print("Selected output directory:", output_dir)
     print()
     print("Starting media file sorting...")
-    sort_and_rename_files(input_dir, output_dir, tag="")
+    sort_and_rename_files(input_dir, output_dir, tag="yarik")
     print("Sorting complete!")
 
 if __name__ == "__main__":
