@@ -4,6 +4,7 @@ from datetime import datetime
 import win32com.client
 from pathlib import Path
 from typing import Dict, Tuple
+from tkinter import filedialog
 
 shell = win32com.client.Dispatch("Shell.Application")
 trans_table = {ord('\u200e') : None, ord('\u200f') : None}
@@ -140,14 +141,15 @@ def sort_and_rename_files(input_dir: str, output_dir: str, tag: str) -> None:
         print(f"Processed: {original_filename} -> {new_filename}")
 
 def main():
-    input_dir = ""  # Replace with your input folder path
-    output_dir = ""  # Replace with your output folder path
-    
+    input_dir = filedialog.askdirectory(title="Choose input folder path")
     print("Selected input directory:", input_dir)
+
+    output_dir = filedialog.askdirectory()
     print("Selected output directory:", output_dir)
+    tag = input("Enter a tag which will appear in filenames or leave an empty line: ")
     print()
     print("Starting media file sorting...")
-    sort_and_rename_files(input_dir, output_dir, tag="yarik")
+    # sort_and_rename_files(input_dir, output_dir, tag="yarik")
     print("Sorting complete!")
 
 if __name__ == "__main__":
